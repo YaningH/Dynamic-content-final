@@ -1,0 +1,237 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+#wrap{  background:#000000;
+  width:100vw;
+  height:100vh;
+  overflow:hidden;
+  padding:20px;
+  padding-top: 100px;}
+canvas{display:block;width:100%;cursor:crosshair}
+.ctrls{margin-top:12px;padding-top:12px;border-top:0.5px solid rgba(255,255,255,0.06)}
+.srow{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.slbl{font-size:11px;color:rgba(255,255,255,0.3);white-space:nowrap}
+.sval{font-size:12px;font-weight:500;min-width:60px;transition:color .3s;color:rgba(255,255,255,0.3)}
+input[type=range]{flex:1;-webkit-appearance:none;height:2px;border-radius:2px;background:rgba(255,255,255,0.12);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#1DC69B;cursor:pointer}
+.leg{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.li{display:flex;align-items:center;gap:5px;font-size:10px;color:rgba(255,255,255,0.28)}
+.ld{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.hint{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.18);font-style:italic}
+</style>
+
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div class="ctrls">
+    <div class="srow">
+      <span class="slbl">What if I capped my week at</span>
+      <input type="range" id="sl" min="10" max="34" step="0.5" value="34">
+      <span class="sval" id="sv">no cap</span>
+    </div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:rgba(255,255,255,0.85)"></div>Full hour worked</div>
+      <div class="li"><div class="ld" style="background:rgba(255,255,255,0.35);width:4px;height:4px"></div>Partial hour</div>
+      <div class="li"><div class="ld" style="background:#1DC69B"></div>Hours freed</div>
+      <div class="li"><div class="ld" style="background:rgba(255,255,255,0.1)"></div>Free</div>
+      <span class="hint">hover to explore</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const TAU=Math.PI*2;
+
+const B=[
+  [],[],[],[{s:7.167,e:11.383}],[{s:6.383,e:10.433}],[{s:5.983,e:10.083},{s:10.95,e:12.667}],[],
+  [],[{s:4.917,e:5.65}],[{s:6.967,e:12.133},{s:12.25,e:15.417},{s:21.333,e:24}],[{s:0,e:1.8},{s:7.067,e:9.55},{s:16.983,e:18.617}],[{s:5.967,e:7.883},{s:9.033,e:10.667}],[{s:0,e:1.017},{s:7.133,e:7.617}],[],
+  [],[{s:6.433,e:10.95}],[{s:6.683,e:12.983}],[{s:6.767,e:13.133}],[{s:5.467,e:11.317}],[{s:7.217,e:9.533},{s:10.0,e:10.523}],[],
+  [],[{s:6.583,e:8.95}],[{s:16.17,e:16.21}],[{s:7.183,e:10.0},{s:13.917,e:17.067}],[{s:0.233,e:1.05},{s:7.033,e:8.683},{s:8.767,e:11.917}],[{s:5.5,e:6.3},{s:10.0,e:10.52}],[{s:9.5,e:10.167},{s:21.483,e:24}],
+  [{s:9.733,e:10.683}],[{s:13.183,e:17.833},{s:20.183,e:22.283}],[{s:9.417,e:12.817},{s:22.367,e:23.233}],[],[{s:17.617,e:19.117},{s:19.967,e:22.783}],[{s:8.117,e:12.833}],[],
+  [{s:9.333,e:10.533}],[{s:8.2,e:16.933}],[{s:6.517,e:10.617}],[{s:8.25,e:14.217}],[{s:8.567,e:11.067},{s:12.0,e:13.067}],[{s:8.317,e:13.483}],[{s:7.983,e:11.167}],
+  [],[{s:14.983,e:18.15},{s:20.183,e:23.2}],[{s:5.7,e:7.05},{s:16.85,e:22.1}],[{s:7.267,e:12.967}],[{s:7.733,e:11.283}],[{s:7.133,e:12.933}],[],
+  [],[{s:7.0,e:7.14}],[{s:6.983,e:14.65}],[{s:0,e:1.333},{s:7.15,e:15.75}],[{s:8.633,e:12.367},{s:18.683,e:23.55}],[{s:6.517,e:12.417}],[],
+  [],[{s:5.833,e:7.15},{s:10.0,e:11.7}],[{s:6.183,e:14.517}],[{s:6.533,e:14.533},{s:19.1,e:22.1}],[{s:7.1,e:14.933}],[{s:7.133,e:10.633},{s:17.317,e:19.217}],[],
+];
+
+const W=[
+  {lb:'Mar 1–7',   h:14.09},
+  {lb:'Mar 8–14',  h:22.69},
+  {lb:'Mar 15–21', h:23.88},
+  {lb:'Mar 22–28', h:18.38},
+  {lb:'Mar 29–Apr 4',h:20.07},
+  {lb:'Apr 5–11',  h:30.34},
+  {lb:'Apr 12–18', h:25.84},
+  {lb:'Apr 19–25', h:30.69},
+  {lb:'Apr 26–May 2',h:33.6},
+];
+
+// stable noise per dot (0–1)
+function sn(d,h){
+  const v=Math.sin(d*9301.47+h*49297.3+17.4)*43758.5453;
+  return v-Math.floor(v);
+}
+
+// pre-compute fractions
+const FRACS=new Float32Array(63*24);
+for(let d=0;d<63;d++) for(let h=0;h<24;h++){
+  let t=0;
+  for(const b of B[d]) t+=Math.max(0,Math.min(b.e,h+1)-Math.max(b.s,h));
+  FRACS[d*24+h]=Math.min(1,t);
+}
+
+// canvas
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+const dpr=window.devicePixelRatio||1;
+const CSS_W=1300, CSS_H=570;
+cv.style.width=CSS_W+'px'; cv.style.height=CSS_H+'px';
+cv.width=CSS_W*dpr; cv.height=CSS_H*dpr;
+ctx.scale(dpr,dpr);
+
+// layout
+const LEFT=150, TOP_H=60, WSEP=3;
+const CW=(CSS_W-LEFT-8*WSEP)/63;
+const GH=CSS_H-TOP_H-2;
+const RH=GH/24;
+const MR=CW/2*0.82;
+const GR=MR*0.25;
+const DL=['S','M','T','W','T','F','S'];
+
+function cx(d){return LEFT+d*CW+Math.floor(d/7)*WSEP+CW/2;}
+function ry(h){return TOP_H+h*RH+RH/2;}
+function wkX(w){return LEFT+w*7*CW+w*WSEP;}
+
+let cap=34, mX=-999, mY=-999;
+let t = 0;
+let pulseSpeed = 0.02;
+
+function isFreed(d,h){
+  const w=Math.floor(d/7);
+  const ff=Math.max(0,(W[w].h-cap)/W[w].h);
+  if(ff<=0) return false;
+  return sn(d,h)<ff;
+}
+
+function draw(){
+  const pulse = 1 + Math.sin(t) * 0.18;
+  ctx.fillStyle='#000000';
+  ctx.fillRect(0,0,CSS_W,CSS_H);
+
+  // ── top bar: week labels + hours + day letters ──
+  for(let w=0;w<9;w++){
+    const x0=wkX(w);
+    const midX=x0+7*CW/2;
+
+    // week label
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.font='500 8px var(--font-sans,sans-serif)';
+    ctx.fillText(W[w].lb, midX, 10);
+
+    // hours
+    ctx.fillStyle='rgba(255,255,255,0.22)';
+    ctx.font='400 7px var(--font-sans,sans-serif)';
+    ctx.fillText(W[w].h+'h', midX, 28);
+
+    // day letters
+    for(let d=0;d<7;d++){
+      ctx.fillStyle='rgba(255,255,255,0.18)';
+      ctx.font='400 6.5px var(--font-sans,sans-serif)';
+      ctx.fillText(DL[d], cx(w*7+d), 45);
+    }
+
+    // week separator
+    if(w>0){
+      ctx.strokeStyle='rgba(255,255,255,0.07)';
+      ctx.lineWidth=0.5;
+      ctx.beginPath();
+      ctx.moveTo(x0-WSEP/2, 0);
+      ctx.lineTo(x0-WSEP/2, CSS_H);
+      ctx.stroke();
+    }
+  }
+
+  // ── time labels ──
+  ctx.textAlign='right';
+  ctx.fillStyle='rgba(255,255,255,0.2)';
+  ctx.font='400 8px var(--font-sans,sans-serif)';
+  [0,6,12,18,23].forEach(h=>ctx.fillText(h===0?'0:00':h+':00',LEFT-3,ry(h)+3));
+
+  // ── hover row highlight ──
+  if(mY>=TOP_H){
+    const hov=Math.floor((mY-TOP_H)/RH);
+    if(hov>=0&&hov<24){
+      ctx.fillStyle='rgba(255,255,255,0.025)';
+      ctx.fillRect(LEFT,TOP_H+hov*RH,CSS_W-LEFT,RH);
+    }
+  }
+
+  // ── ghost dots (batch) ──
+  ctx.fillStyle='rgba(255,255,255,0.07)';
+  ctx.beginPath();
+  for(let d=0;d<63;d++){
+    const x=cx(d);
+    for(let h=0;h<24;h++){
+      if(FRACS[d*24+h]>0) continue;
+      const y=ry(h);
+      const prox=Math.max(0,1-Math.sqrt((x-mX)**2+(y-mY)**2)/34)*0.7;
+      const r=GR+prox*0.4;
+      ctx.moveTo(x+r,y); ctx.arc(x,y,r,0,TAU);
+    }
+  }
+  ctx.fill();
+
+  // ── work dots ──
+  for(let d=0;d<63;d++){
+    const x=cx(d);
+    for(let h=0;h<24;h++){
+      const f=FRACS[d*24+h];
+      if(f===0) continue;
+      const freed=isFreed(d,h);
+      const y=ry(h);
+      const prox=Math.max(0,1-Math.sqrt((x-mX)**2+(y-mY)**2)/34)*1.0;
+
+      let r,alpha;
+      if(freed){
+        r=GR+(MR-GR)*f*0.42+prox*0.5;
+        alpha=0.45+f*0.3;
+        ctx.fillStyle=`rgba(29,198,155,${alpha})`;
+      } else {
+        r=GR+(MR-GR)*f+prox;
+        alpha=0.38+f*0.52;
+        ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+      }
+      ctx.beginPath();
+      ctx.arc(x,y,Math.min(r * pulse,MR*1.35),0,TAU);
+      ctx.fill();
+    }
+  }
+}
+
+function onSlide(v){
+  cap=v;
+  pulseSpeed = 0.01 + (34 - v) * 0.003;
+  const sv=document.getElementById('sv');
+  sv.textContent=v>=34?'no cap':v+'h/wk';
+  sv.style.color=v<=18?'#1DC69B':v<=24?'#ef9f27':'rgba(255,255,255,0.4)';
+  draw();
+}
+
+document.getElementById('sl').addEventListener('input',e=>onSlide(+e.target.value));
+
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect();
+  mX=(e.clientX-r.left)*(CSS_W/r.width);
+  mY=(e.clientY-r.top)*(CSS_H/r.height);
+  draw();
+});
+cv.addEventListener('mouseleave',()=>{mX=-999;mY=-999;draw();});
+
+function animate(){
+  t += pulseSpeed;
+  draw();
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
